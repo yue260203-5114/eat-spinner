@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="今天吃什么">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<title>今天吃什么</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: #f7f7f7; font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+body { display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding-bottom: 40px; }
+
+/* ── 顶部标题栏 ── */
+.topbar { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px; }
+.topbar h1 { font-size: 20px; font-weight: 700; color: #1a1a1a; flex: 1; text-align: center; cursor: pointer; }
+.topbar h1 span { border-bottom: 2px dashed #E24B4A; padding-bottom: 1px; }
+.edit-btn { font-size: 13px; color: #E24B4A; border: 1.5px solid #E24B4A; border-radius: 14px; padding: 4px 12px; background: transparent; cursor: pointer; white-space: nowrap; }
+
+/* ── 转盘区 ── */
+.wheel-wrap { position: relative; width: min(88vw, 360px); height: min(88vw, 360px); flex-shrink: 0; margin: 8px 0; }
+canvas { width: 100%; height: 100%; border-radius: 50%; display: block; touch-action: manipulation; }
+.needle { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 13px solid transparent; border-right: 13px solid transparent; border-top: 34px solid #E24B4A; z-index: 10; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25)); }
+.center-dot { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 22px; height: 22px; background: white; border-radius: 50%; border: 3px solid #aaa; z-index: 10; }
+
+/* ── 结果区 ── */
+.result-area { margin: 10px 0 4px; text-align: center; min-height: 60px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.result-label { font-size: 13px; color: #888; visibility: hidden; }
+.result-label.show { visibility: visible; }
+.result-name { font-size: 28px; font-weight: 700; color: #E24B4A; min-height: 36px; transition: transform 0.25s ease; }
+.hint { font-size: 13px; color: #bbb; margin-bottom: 16px; }
+
+/* ── 编辑面板 ── */
+.panel-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: flex-end; justify-content: center; }
+.panel-mask.open { display: flex; }
+.panel { background: #fff; width: 100%; max-width: 480px; border-radius: 20px 20px 0 0; padding: 20px 16px 40px; max-height: 85vh; overflow-y: auto; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.panel-header h2 { font-size: 17px; font-weight: 700; color: #1a1a1a; }
+.close-btn { font-size: 22px; color: #aaa; cursor: pointer; line-height: 1; padding: 0 4px; }
+
+/* 标题编辑 */
+.section-label { font-size: 12px; color: #888; margin-bottom: 6px; margin-top: 14px; }
+.title-input { width: 100%; border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 10px 12px; font-size: 16px; font-family: inherit; outline: none; }
+.title-input:focus { border-color: #E24B4A; }
+
+/* 选项列表 */
+.items-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.item-row { display: flex; align-items: center; gap: 8px; }
+.item-input { flex: 1; border: 1.5px solid #e0e0e0; border-radius: 10px; padding: 9px 12px; font-size: 15px; font-family: inherit; outline: none; }
+.item-input:focus { border-color: #E24B4A; }
+.del-btn { width: 32px; height: 32px; border-radius: 50%; background: #fee; border: none; color: #E24B4A; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.add-btn { margin-top: 10px; width: 100%; padding: 11px; border-radius: 12px; border: 1.5px dashed #E24B4A; background: transparent; color: #E24B4A; font-size: 15px; cursor: pointer; font-family: inherit; }
+.save-btn { margin-top: 16px; width: 100%; padding: 14px; border-radius: 14px; background: #E24B4A; border: none; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.save-btn:active { opacity: 0.85; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="width:64px"></div>
+  <h1 id="titleDisplay"><span id="titleText">今天 eat 什么？</span></h1>
+  <button class="edit-btn" onclick="openPanel()">自定义</button>
+</div>
+
+<div class="wheel-wrap">
+  <div class="needle"></div>
+  <canvas id="wheel"></canvas>
+  <div class="center-dot"></div>
+</div>
+
+<div class="result-area">
+  <div class="result-label" id="lbl">命运的选择是</div>
+  <div class="result-name" id="res"></div>
+</div>
+<div class="hint" id="hint">点击转盘开始旋转</div>
+
+<!-- 编辑面板 -->
+<div class="panel-mask" id="panelMask" onclick="maskClick(event)">
+  <div class="panel" id="panel">
+    <div class="panel-header">
+      <h2>自定义转盘</h2>
+      <span class="close-btn" onclick="closePanel()">×</span>
+    </div>
+
+    <div class="section-label">转盘标题</div>
+    <input class="title-input" id="titleInput" type="text" placeholder="输入转盘标题">
+
+    <div class="section-label">转盘选项（最少2个，最多20个）</div>
+    <div class="items-list" id="itemsList"></div>
+    <button class="add-btn" onclick="addItem()">＋ 添加选项</button>
+    <button class="save-btn" onclick="saveAndClose()">保存并应用</button>
+  </div>
+</div>
+
+<script>
+// ── 默认数据 ──────────────────────────────────────
+const DEFAULT_TITLE = '今天 eat 什么？';
+const DEFAULT_ITEMS = ['火锅','鸡汤','翘脚牛肉','山东炒鸡','金汤肥牛','炒菜','米线','饺子','酸菜鱼','捞汁小海鲜','寿司','裤带面','红烧肉','潮汕牛肉','干锅'];
+const PALETTE = ['#F5C4B3','#B5D4F4','#C0DD97','#F4C0D1','#FAC775','#9FE1CB','#AFA9EC','#F0997B','#85B7EB','#CECBF6','#5DCAA5','#EF9F27','#FAEEDA','#97C459','#ED93B1','#F9D29D','#AEDFF7','#D4EDDA','#F8C8D4','#D6C6E1'];
+const TCOLORS = ['#993C1D','#185FA5','#3B6D11','#993556','#854F0B','#0F6E56','#3C3489','#712B13','#0C447C','#3C3489','#085041','#633806','#854F0B','#27500A','#72243E','#7A5C00','#0A4A6E','#1A5C2A','#7A2040','#4A3570'];
+
+// ── 状态 ─────────────────────────────────────────
+let wheelTitle = DEFAULT_TITLE;
+let items = [...DEFAULT_ITEMS];
+
+// 读取本地存储
+try {
+  const saved = localStorage.getItem('spinnerData');
+  if (saved) { const d = JSON.parse(saved); wheelTitle = d.title || DEFAULT_TITLE; items = d.items || DEFAULT_ITEMS; }
+} catch(e) {}
+
+// ── Canvas ────────────────────────────────────────
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+let angle = -Math.PI / 2, spinning = false, raf;
+const SPEED = 0.08;
+
+function resize() {
+  const s = Math.min(window.innerWidth * 0.88, 360);
+  canvas.width = canvas.height = Math.round(s * devicePixelRatio);
+  canvas.style.width = canvas.style.height = s + 'px';
+  draw();
+}
+
+function draw() {
+  const N = items.length, SLICE = 2 * Math.PI / N;
+  const W = canvas.width, cx = W/2, cy = W/2, r = W/2 - 3;
+  ctx.clearRect(0, 0, W, W);
+  for (let i = 0; i < N; i++) {
+    const s = angle + i*SLICE - SLICE/2, e = s + SLICE;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,s,e); ctx.closePath();
+    ctx.fillStyle = PALETTE[i % PALETTE.length]; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(angle + i*SLICE); ctx.textAlign = 'right';
+    ctx.fillStyle = TCOLORS[i % TCOLORS.length];
+    const fs = Math.round((items[i].length > 4 ? 0.046 : 0.053) * W);
+    ctx.font = `500 ${fs}px -apple-system,"PingFang SC",sans-serif`;
+    ctx.fillText(items[i], r - Math.round(0.045*W), Math.round(0.018*W));
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,2*Math.PI);
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)'; ctx.lineWidth = 3; ctx.stroke();
+}
+
+function getResult() {
+  const N = items.length, SLICE = 2*Math.PI/N, needle = -Math.PI/2;
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < N; i++) {
+    const mid = angle + i*SLICE;
+    let diff = ((mid - needle) % (2*Math.PI) + 3*Math.PI) % (2*Math.PI) - Math.PI;
+    if (Math.abs(diff) < bestDist) { bestDist = Math.abs(diff); best = i; }
+  }
+  return items[best];
+}
+
+function loop() {
+  if (!spinning) return;
+  angle += SPEED; draw();
+  raf = requestAnimationFrame(loop);
+}
+
+function showResult() {
+  const r = getResult();
+  document.getElementById('lbl').classList.add('show');
+  const el = document.getElementById('res');
+  el.textContent = r + ' 🍽';
+  el.style.transform = 'scale(1.15)';
+  setTimeout(() => el.style.transform = 'scale(1)', 250);
+  document.getElementById('hint').textContent = '再点一次重新转';
+  if (navigator.vibrate) navigator.vibrate([30,30,60]);
+}
+
+function onTap() {
+  if (!spinning) {
+    spinning = true;
+    document.getElementById('lbl').classList.remove('show');
+    document.getElementById('res').textContent = '';
+    document.getElementById('hint').textContent = '再点一下停下来';
+    if (navigator.vibrate) navigator.vibrate(15);
+    raf = requestAnimationFrame(loop);
+  } else {
+    spinning = false; cancelAnimationFrame(raf); draw(); showResult();
+  }
+}
+
+canvas.addEventListener('click', onTap);
+canvas.addEventListener('touchend', e => { e.preventDefault(); onTap(); }, { passive: false });
+window.addEventListener('resize', resize);
+
+function updateTitle() {
+  document.getElementById('titleText').textContent = wheelTitle;
+  document.title = wheelTitle;
+}
+
+// ── 编辑面板 ──────────────────────────────────────
+function openPanel() {
+  document.getElementById('titleInput').value = wheelTitle;
+  renderItemsList();
+  document.getElementById('panelMask').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('panelMask').classList.remove('open');
+}
+
+function maskClick(e) {
+  if (e.target === document.getElementById('panelMask')) closePanel();
+}
+
+function renderItemsList() {
+  const list = document.getElementById('itemsList');
+  list.innerHTML = '';
+  items.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <div style="width:24px;height:24px;border-radius:6px;background:${PALETTE[i%PALETTE.length]};flex-shrink:0;border:1px solid rgba(0,0,0,0.08)"></div>
+      <input class="item-input" value="${item}" placeholder="选项名称" data-index="${i}">
+      <button class="del-btn" onclick="delItem(${i})" ${items.length <= 2 ? 'disabled style="opacity:0.3"' : ''}>−</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function addItem() {
+  if (items.length >= 20) { alert('最多20个选项'); return; }
+  items.push('新选项');
+  renderItemsList();
+  // 滚动到底部
+  setTimeout(() => {
+    const list = document.getElementById('itemsList');
+    const inputs = list.querySelectorAll('.item-input');
+    const last = inputs[inputs.length - 1];
+    last.focus(); last.select();
+  }, 50);
+}
+
+function delItem(i) {
+  if (items.length <= 2) return;
+  items.splice(i, 1);
+  renderItemsList();
+}
+
+function saveAndClose() {
+  // 读取标题
+  const newTitle = document.getElementById('titleInput').value.trim();
+  if (newTitle) wheelTitle = newTitle;
+
+  // 读取选项
+  const inputs = document.querySelectorAll('.item-input');
+  const newItems = [];
+  inputs.forEach(inp => {
+    const v = inp.value.trim();
+    if (v) newItems.push(v);
+  });
+  if (newItems.length < 2) { alert('至少需要2个选项'); return; }
+  items = newItems;
+
+  // 保存
+  try { localStorage.setItem('spinnerData', JSON.stringify({ title: wheelTitle, items })); } catch(e) {}
+
+  updateTitle();
+  draw();
+  closePanel();
+
+  // 重置结果
+  document.getElementById('lbl').classList.remove('show');
+  document.getElementById('res').textContent = '';
+  document.getElementById('hint').textContent = '点击转盘开始旋转';
+}
+
+// ── 初始化 ────────────────────────────────────────
+updateTitle();
+resize();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

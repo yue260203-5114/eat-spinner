@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="今天吃什么">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffffff">
+<title>今天吃什么</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: #fff; font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; overflow: hidden; }
+body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 20px; }
+h1 { font-size: 22px; font-weight: 600; color: #1a1a1a; margin-bottom: 14px; letter-spacing: 0.03em; }
+.wheel-wrap { position: relative; width: min(88vw, 360px); height: min(88vw, 360px); flex-shrink: 0; }
+canvas { width: 100%; height: 100%; border-radius: 50%; display: block; touch-action: manipulation; }
+/* 指针固定在顶部正中，尖端朝下指向圆心方向 */
+.needle { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); width: 0; height: 0;
+  border-left: 13px solid transparent; border-right: 13px solid transparent;
+  border-top: 34px solid #E24B4A; z-index: 10; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25)); }
+.center-dot { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 22px; height: 22px; background: white; border-radius: 50%; border: 3px solid #aaa; z-index: 10; }
+.result-area { margin-top: 22px; text-align: center; min-height: 64px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.result-label { font-size: 13px; color: #888; visibility: hidden; }
+.result-label.show { visibility: visible; }
+.result-name { font-size: 30px; font-weight: 600; color: #E24B4A; min-height: 38px; transition: transform 0.25s ease; }
+.hint { margin-top: 14px; font-size: 13px; color: #bbb; }
+</style>
+</head>
+<body>
+<h1>今天 eat 什么？</h1>
+<div class="wheel-wrap" id="wheelWrap">
+  <div class="needle"></div>
+  <canvas id="wheel"></canvas>
+  <div class="center-dot"></div>
+</div>
+<div class="result-area">
+  <div class="result-label" id="lbl">命运的选择是</div>
+  <div class="result-name" id="res"></div>
+</div>
+<div class="hint" id="hint">点击转盘开始旋转</div>
+
+<script>
+// ── 数据 ──────────────────────────────────────────
+const items   = ['火锅','鸡汤','翘脚牛肉','山东炒鸡','金汤肥牛','炒菜','米线','饺子','酸菜鱼','捞汁小海鲜','寿司','裤带面','红烧肉','潮汕牛肉','干锅'];
+const palette = ['#F5C4B3','#B5D4F4','#C0DD97','#F4C0D1','#FAC775','#9FE1CB','#AFA9EC','#F0997B','#85B7EB','#CECBF6','#5DCAA5','#EF9F27','#FAEEDA','#97C459','#ED93B1'];
+const tcolors = ['#993C1D','#185FA5','#3B6D11','#993556','#854F0B','#0F6E56','#3C3489','#712B13','#0C447C','#3C3489','#085041','#633806','#854F0B','#27500A','#72243E'];
+
+const N     = items.length;
+const SLICE = 2 * Math.PI / N;   // 每格弧度
+
+// ── Canvas 设置 ────────────────────────────────────
+const canvas = document.getElementById('wheel');
+const ctx    = canvas.getContext('2d');
+
+function resize() {
+  const s = Math.min(window.innerWidth * 0.88, 360);
+  canvas.width = canvas.height = Math.round(s * devicePixelRatio);
+  canvas.style.width = canvas.style.height = s + 'px';
+  draw();
+}
+
+// ── 绘制转盘 ──────────────────────────────────────
+// 约定：index 0 的格子从 -SLICE/2 到 +SLICE/2（即以 0° = 右侧为中心）
+// 绘制时加上 `angle` 偏移，angle 从 0 开始随旋转增大
+function draw() {
+  const W = canvas.width;
+  const cx = W / 2, cy = W / 2, r = W / 2 - 3;
+  ctx.clearRect(0, 0, W, W);
+
+  for (let i = 0; i < N; i++) {
+    // 每格起止角：以 angle 为基础，第 i 格偏移 i*SLICE，再向左移半格使 i=0 居中在 angle 方向
+    const startAng = angle + i * SLICE - SLICE / 2;
+    const endAng   = startAng + SLICE;
+
+    // 绘制扇形
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAng, endAng);
+    ctx.closePath();
+    ctx.fillStyle = palette[i];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 文字：沿格子中线方向、靠近外缘
+    const midAng = startAng + SLICE / 2;   // = angle + i*SLICE，格子中线
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(midAng);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = tcolors[i];
+    const fs = Math.round((items[i].length > 4 ? 0.048 : 0.054) * W);
+    ctx.font = `500 ${fs}px -apple-system,"PingFang SC",sans-serif`;
+    ctx.fillText(items[i], r - Math.round(0.045 * W), Math.round(0.018 * W));
+    ctx.restore();
+  }
+
+  // 外圈描边
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+}
+
+// ── 指针方向 → 当前格子 ───────────────────────────
+// 指针固定在顶部，对应画布角度 = -π/2（即 270° / -90°）
+// 第 i 格的中线角度 = angle + i*SLICE
+// 当某格中线 ≡ -π/2 (mod 2π) 时，该格正对指针
+// 所以：找使 (angle + i*SLICE) mod 2π 最接近 -π/2 的 i
+function getResult() {
+  const needle = -Math.PI / 2;   // 顶部指针在画布中的固定角度
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < N; i++) {
+    const mid = angle + i * SLICE;
+    // 归一化差值到 (-π, π]
+    let diff = ((mid - needle) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+    const dist = Math.abs(diff);
+    if (dist < bestDist) { bestDist = dist; best = i; }
+  }
+  return items[best];
+}
+
+// ── 旋转状态 ──────────────────────────────────────
+let angle   = -Math.PI / 2;   // 初始让第 0 格中线对准顶部指针
+let spinning = false;
+let raf;
+const SPEED = 0.08;   // 恒定转速（每帧弧度），约 2.7 转/秒，可自行调大
+
+function loop() {
+  if (!spinning) return;
+  angle += SPEED;
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+
+// ── 停止并显示结果 ────────────────────────────────
+function stop() {
+  spinning = false;
+  cancelAnimationFrame(raf);
+  draw();
+
+  const winner = getResult();
+  document.getElementById('lbl').classList.add('show');
+  const el = document.getElementById('res');
+  el.textContent = winner + ' 🍽';
+  el.style.transform = 'scale(1.15)';
+  setTimeout(() => el.style.transform = 'scale(1)', 250);
+  document.getElementById('hint').textContent = '再点一次重新转';
+  if (navigator.vibrate) navigator.vibrate([30, 30, 60]);
+}
+
+// ── 开始旋转 ──────────────────────────────────────
+function start() {
+  document.getElementById('lbl').classList.remove('show');
+  document.getElementById('res').textContent = '';
+  document.getElementById('hint').textContent = '再点一下停下来';
+  spinning = true;
+  if (navigator.vibrate) navigator.vibrate(15);
+  raf = requestAnimationFrame(loop);
+}
+
+// ── 点击/触摸事件 ─────────────────────────────────
+function onTap() {
+  if (spinning) { stop(); } else { start(); }
+}
+
+canvas.addEventListener('click', onTap);
+canvas.addEventListener('touchend', e => { e.preventDefault(); onTap(); }, { passive: false });
+window.addEventListener('resize', resize);
+
+resize();   // 初始化
+</script>
+</body>
+</html>

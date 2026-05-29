@@ -1,0 +1,19 @@
+{
+  "name": "今天吃什么",
+  "short_name": "吃什么",
+  "description": "每天选择吃什么的转盘小工具",
+  "start_url": "/eat-spinner/",
+  "scope": "/eat-spinner/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
